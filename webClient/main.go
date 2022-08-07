@@ -2,13 +2,17 @@ package main
  
 import (
     "fmt"
+    "log"
     "io/ioutil"
     "net/http"
 )
- 
-func main() {
-    // Request 객체 생성
-    req, err := http.NewRequest("GET", "http://csharp.tips/feed/rss", nil)
+const (
+    URL = "http://192.168.57.31:8081/"
+)
+
+func getweb(){
+    log.Printf("getweb call")
+    req, err := http.NewRequest("GET", URL, nil)
     if err != nil {
         panic(err)
     }
@@ -28,4 +32,11 @@ func main() {
     bytes, _ := ioutil.ReadAll(resp.Body)
     str := string(bytes) //바이트를 문자열로
     fmt.Println(str)
+}
+
+
+func main() {
+    for i:=0; i<1000; i++{
+        getweb()
+    }    
 }
