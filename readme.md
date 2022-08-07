@@ -1,4 +1,6 @@
-# Proxy  Test
+# Web Server Test
+
+## Simple Web Server - We Client
 
 ### 1. WebServer-Client
 
@@ -160,3 +162,169 @@ hello* Connection #0 to host localhost left intact
 
 C:\Gocode\src>
 ```
+
+## 
+
+## Client->ReverseProxy->WebServer
+
+[WebClient] -->[ReverseProxy] -->[WebServer]
+
+* 각 구간에서 Keep-Alive 동작 상태를 확인하려고 함. 
+* 잘 동작하네.. !!
+
+##### web Client
+
+```go
+package main
+
+import ( "fmt"	"io/ioutil"	"log"	"net/http")
+
+const (
+	URL = "http://192.168.57.31:8080/"  //proxy url 
+)
+
+func getweb() {
+	log.Printf("getweb call")
+	req, err := http.NewRequest("GET", URL, nil)
+	if err != nil {
+		panic(err)
+	}
+	req.Header.Add("User-Agent", "Crawler")
+	client := &http.Client{}
+	resp, err := client.Do(req)
+	if err != nil {
+		panic(err)
+	}
+	defer resp.Body.Close()
+
+    log.Printf("%v",resp.Header)
+	bytes, _ := ioutil.ReadAll(resp.Body)
+	str := string(bytes) //바이트를 문자열로
+	fmt.Println(str)
+}
+
+func main() {
+	for i := 0; i < 1000; i++ {
+		getweb()
+	}
+}
+```
+
+
+
+##### reserse Procy
+
+```go
+package main
+ 
+import ( "errors" "fmt"     "log"    "net/http"    "net/http/httputil"    "net/url")
+ 
+// NewProxy takes target host and creates a reverse proxy
+func NewProxy(targetHost string) (*httputil.ReverseProxy, error) {
+    url, err := url.Parse(targetHost)
+    if err != nil {
+        return nil, err
+    }
+ 
+    proxy := httputil.NewSingleHostReverseProxy(url)
+ 
+    originalDirector := proxy.Director
+    proxy.Director = func(req *http.Request) {
+        originalDirector(req)
+        modifyRequest(req)
+    }
+ 
+    //proxy.ModifyResponse = modifyResponse()   //<<-- return 전달위해서 
+    //proxy.ErrorHandler = errorHandler()
+    return proxy, nil
+}
+ 
+func modifyRequest(req *http.Request) {
+    req.Header.Set("X-Proxy", "Simple-Reverse-Proxy")
+}
+ 
+func errorHandler() func(http.ResponseWriter, *http.Request, error) {
+    return func(w http.ResponseWriter, req *http.Request, err error) {
+        fmt.Printf("Got error while modifying response: %v \n", err)
+        return
+    }
+}
+ 
+func modifyResponse() func(*http.Response) error {
+    return func(resp *http.Response) error {
+        return errors.New("response body is invalid")
+    }
+}
+ 
+// ProxyRequestHandler handles the http request using proxy
+func ProxyRequestHandler(proxy *httputil.ReverseProxy) func(http.ResponseWriter, *http.Request) {
+    return func(w http.ResponseWriter, r *http.Request) {
+        proxy.ServeHTTP(w, r)
+    }
+}
+ 
+func main() {
+    // initialize a reverse proxy and pass the actual backend server url here
+    proxy, err := NewProxy("http://192.168.57.31:8081")    //<<-- web server url 
+    if err != nil {
+        panic(err)
+    }
+ 
+    // handle all requests to your server using the proxy
+    http.HandleFunc("/", ProxyRequestHandler(proxy))
+    log.Fatal(http.ListenAndServe(":8080", nil))
+}
+```
+
+
+
+##### web server
+
+```go
+package main
+import (fmt"	"log"	"net/http"	"strconv"	"sync"	"time")
+var counter int
+var mutex = &sync.Mutex{}
+
+func echoString(w http.ResponseWriter, r *http.Request) {
+	log.Printf("[%s][%s][%s][%v]", r.Method, r.Proto, r.URL.Path, r.Header)
+	fmt.Fprintf(w, "hello  : ")
+	mutex.Lock()
+	counter++
+	time.Sleep(time.Millisecond * 100)
+	mutex.Unlock()
+	fmt.Fprintf(w, strconv.Itoa(counter))
+	log.Printf("[%s]", strconv.Itoa(counter))
+}
+
+func main() {
+	mux := http.NewServeMux()
+	mux.HandleFunc("/", echoString)		
+	mux.HandleFunc("/hi", func(w http.ResponseWriter, r *http.Request) {
+		fmt.Fprintf(w, "Hi")
+	})
+
+	server := &http.Server{Addr: ":8081", Handler: mux}
+	//server.SetKeepAlivesEnabled(false)
+	server.ListenAndServe()
+	//http.ListenAndServe(":8081", nil)
+}
+```
+
+
+
+#### 1. WebClient - Proxy 구간
+
+* keep alive  동작함.
+
+```
+$ netstat -na | grep  8080
+tcp        0      0 192.168.57.6:35390      192.168.57.31:8080      ESTABLISHED
+```
+
+
+
+#### 2. proxy-Webserver 구간
+
+* keep-alive 동작하지 않음.
+
