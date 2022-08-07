@@ -326,5 +326,5 @@ tcp        0      0 192.168.57.6:35390      192.168.57.31:8080      ESTABLISHED
 
 #### 2. proxy-Webserver 구간
 
-* keep-alive 동작하지 않음.
+* keep-alive 동작하네요. ㅎㅎ
 
