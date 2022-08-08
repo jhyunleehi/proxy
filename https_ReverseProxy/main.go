@@ -16,13 +16,24 @@ const (
 	SERVER = "https://localhost:9443"
 )
 
+var proxy *httputil.ReverseProxy
+var transport *http.Transport
+
+func init() {
+	//	url := url.URL{}
+	// proxy = httputil.NewSingleHostReverseProxy(&url)
+	transport = &http.Transport{
+		MaxIdleConns:          1000,
+		IdleConnTimeout:       time.Duration(60) * time.Second,
+		ResponseHeaderTimeout: time.Duration(10) * time.Second,
+		TLSClientConfig:       &tls.Config{InsecureSkipVerify: true},
+	}
+}
+
 // Given a request send it to the appropriate url
 func loadBalacer(res http.ResponseWriter, req *http.Request) {
-	// Get address of one backend server on which we forward request
 	url := getProxyURL()
-	// Log the request
 	logRequestPayload(url)
-	// Forward request to original request
 	serveReverseProxy(url, res, req)
 }
 
@@ -48,13 +59,8 @@ func serveReverseProxy(target string, res http.ResponseWriter, req *http.Request
 	// parse the url
 	url, _ := url.Parse(target)
 	// create the reverse proxy
-	proxy := httputil.NewSingleHostReverseProxy(url)
-	proxy.Transport = &http.Transport{
-		MaxIdleConns:          1000,
-		IdleConnTimeout:       time.Duration(60) * time.Second,
-		ResponseHeaderTimeout: time.Duration(10) * time.Second,
-		TLSClientConfig:       &tls.Config{InsecureSkipVerify: true},
-	}
+	proxy = httputil.NewSingleHostReverseProxy(url)
+	proxy.Transport = transport
 	proxy.ServeHTTP(res, req)
 }
 
